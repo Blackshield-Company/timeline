@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <title>Timeline</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Timeline</h1>
+    <p id="store-path" class="path"></p>
+    <button id="export" class="btn" type="button">Export</button>
+  </header>
+  <p id="error" class="error" hidden></p>
+  <main>
+    <section class="board">
+      <form id="new-event">
+        <h2>Event</h2>
+        <input name="at" required placeholder="2026-09-18T14:32:00Z" spellcheck="false" />
+        <input name="description" required placeholder="What happened" spellcheck="false" />
+        <input name="source" required placeholder="Source" spellcheck="false" />
+        <input name="subject" placeholder="Subject" spellcheck="false" />
+        <input name="location" placeholder="Location" spellcheck="false" />
+        <input name="lat" placeholder="Latitude" spellcheck="false" />
+        <input name="lon" placeholder="Longitude" spellcheck="false" />
+        <button class="btn" type="submit">Add</button>
+      </form>
+      <h2>Conflicts</h2>
+      <ul id="conflicts"></ul>
+    </section>
+    <section>
+      <ul id="events"></ul>
+      <p id="saved" class="saved"></p>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -83,7 +83,8 @@ Each event has:
 ## Roadmap
 
 - [x] Richer conflict heuristics (travel-time estimates, confidence scoring).
-- A [Tauri](https://tauri.app) desktop GUI is planned, so timelines can be built and reviewed visually without touching the terminal.
+- [x] Tauri GUI (`timeline-desktop`, same local store, no network)
+- [ ] Windows and Mac release builds (workflow is in, run it when the suite is finished)
 
 ## License
 

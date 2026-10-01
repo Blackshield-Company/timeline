@@ -1,0 +1,32 @@
+:root {
+  --bg: #101014;
+  --panel: #18181c;
+  --line: #2a2a30;
+  --steel: #8f959c;
+  --bone: #d8d3c8;
+  --blood: #c1121f;
+  --muted: #6e737a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--bone); font: 15px/1.45 "IBM Plex Sans", "Segoe UI", sans-serif; }
+body { display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+h1 { margin: 0; font-size: 18px; letter-spacing: 0.14em; text-transform: uppercase; }
+h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--steel); }
+.path, .saved { color: var(--muted); font-size: 12px; margin: 0; }
+.path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.error { margin: 0; padding: 8px 18px; background: #2a1014; color: #f0c4c8; }
+main { flex: 1; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
+section { padding: 16px 18px; overflow: auto; }
+.board { border-right: 1px solid var(--line); background: var(--panel); }
+input {
+  width: 100%; margin: 0 0 8px; padding: 8px 10px;
+  background: #101014 !important; color: var(--bone) !important;
+  border: 1px solid var(--line); border-radius: 2px;
+  -webkit-appearance: none; appearance: none; font: inherit;
+}
+.btn { background: transparent; color: var(--bone); border: 1px solid var(--steel); padding: 8px 12px; cursor: pointer; font: inherit; }
+.btn:hover { border-color: var(--blood); color: white; }
+ul { list-style: none; margin: 12px 0 0; padding: 0; }
+li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.when { display: block; color: var(--steel); font-size: 12px; }
