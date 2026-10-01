@@ -13,7 +13,7 @@ pub const STORE_FILE: &str = "timeline.json";
 pub const DEFAULT_WINDOW_MINUTES: i64 = 30;
 
 /// A single evidence event on the timeline.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
     /// When the event occurred (always stored normalized to UTC).
     pub at: DateTime<Utc>,
@@ -27,6 +27,12 @@ pub struct Event {
     /// Optional location tag.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    /// Optional latitude, decimal degrees. Used only for travel-time estimates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lat: Option<f64>,
+    /// Optional longitude, decimal degrees.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lon: Option<f64>,
 }
 
 /// The on-disk store: a flat JSON document holding all events.
@@ -77,16 +83,31 @@ pub fn parse_timestamp(input: &str) -> Result<DateTime<Utc>> {
     bail!("unrecognized timestamp '{input}': expected RFC3339 or YYYY-MM-DD")
 }
 
+/// Default assumed speed when both sightings have coordinates.
+pub const DEFAULT_MPH: f64 = 45.0;
+
+/// How hard a conflict should be leaned on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Confidence {
+    /// Coordinates say the gap is less than half the required drive.
+    High,
+    /// Window hit, or coordinates say the drive does not fit, but not by half.
+    Medium,
+}
+
 /// A flagged conflict between two (or more) events.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Conflict {
-    /// Same subject recorded at two different locations within a window too
-    /// short to plausibly travel between them.
+    /// Same subject recorded at two different locations too close together
+    /// to travel, either inside the flat window or slower than the drive estimate.
     ImpossibleTravel {
         subject: String,
         first: Event,
         second: Event,
         gap_minutes: i64,
+        /// Minutes the drive would take at the assumed speed, when both points have coordinates.
+        required_minutes: Option<i64>,
+        confidence: Confidence,
     },
     /// Exact-duplicate descriptions reported by different sources.
     DuplicateDescription {
@@ -97,12 +118,16 @@ pub enum Conflict {
 
 /// Scan a set of events for suspicious overlaps.
 ///
-/// `window_minutes` is the travel threshold: two sightings of the same subject
-/// at different locations closer together than this are flagged.
+/// `window_minutes` is the flat travel threshold. When both sightings carry
+/// coordinates, a drive-time estimate at [`DEFAULT_MPH`] can also flag the pair.
 pub fn detect_conflicts(events: &[Event], window_minutes: i64) -> Vec<Conflict> {
+    detect_conflicts_at(events, window_minutes, DEFAULT_MPH)
+}
+
+/// Same as [`detect_conflicts`], with an explicit assumed speed in miles per hour.
+pub fn detect_conflicts_at(events: &[Event], window_minutes: i64, mph: f64) -> Vec<Conflict> {
     let mut conflicts = Vec::new();
 
-    // Impossible travel: same subject, different locations, within window.
     let mut by_subject: HashMap<&str, Vec<&Event>> = HashMap::new();
     for e in events {
         if let Some(subject) = e.subject.as_deref() {
@@ -116,15 +141,28 @@ pub fn detect_conflicts(events: &[Event], window_minutes: i64) -> Vec<Conflict> 
             let (a, b) = (pair[0], pair[1]);
             let gap = b.at - a.at;
             let different_place = match (&a.location, &b.location) {
-                (Some(la), Some(lb)) => la != lb,
-                _ => false, // can't compare without both locations
+                (Some(la), Some(lb)) => !la.trim().eq_ignore_ascii_case(lb.trim()),
+                _ => false,
             };
-            if different_place && gap < window {
+            if !different_place {
+                continue;
+            }
+            let required = travel_minutes(a, b, mph);
+            let gap_minutes = gap.num_minutes();
+            let window_hit = gap < window;
+            let travel_hit = required.is_some_and(|need| gap_minutes < need);
+            if window_hit || travel_hit {
+                let confidence = match required {
+                    Some(need) if gap_minutes * 2 < need => Confidence::High,
+                    _ => Confidence::Medium,
+                };
                 conflicts.push(Conflict::ImpossibleTravel {
                     subject: subject.to_string(),
                     first: a.clone(),
                     second: b.clone(),
-                    gap_minutes: gap.num_minutes(),
+                    gap_minutes,
+                    required_minutes: required,
+                    confidence,
                 });
             }
         }
@@ -204,6 +242,8 @@ pub fn import_csv(path: &Path) -> Result<Vec<Event>> {
             source,
             subject,
             location,
+            lat: parse_coord(record.get(5)),
+            lon: parse_coord(record.get(6)),
         });
     }
     Ok(events)
@@ -214,4 +254,28 @@ fn non_empty(field: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
+}
+
+fn parse_coord(field: Option<&str>) -> Option<f64> {
+    field.map(str::trim).filter(|s| !s.is_empty())?.parse().ok()
+}
+
+/// Minutes to drive between two sightings at `mph`, when both have coordinates.
+fn travel_minutes(a: &Event, b: &Event, mph: f64) -> Option<i64> {
+    if mph <= 0.0 {
+        return None;
+    }
+    let (lat1, lon1) = (a.lat?, a.lon?);
+    let (lat2, lon2) = (b.lat?, b.lon?);
+    let miles = haversine_miles(lat1, lon1, lat2, lon2);
+    Some(((miles / mph) * 60.0).ceil() as i64)
+}
+
+fn haversine_miles(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
+    let radius = 3958.8;
+    let dlat = (lat2 - lat1).to_radians();
+    let dlon = (lon2 - lon1).to_radians();
+    let a = (dlat / 2.0).sin().powi(2)
+        + lat1.to_radians().cos() * lat2.to_radians().cos() * (dlon / 2.0).sin().powi(2);
+    radius * 2.0 * a.sqrt().asin()
 }

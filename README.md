@@ -55,7 +55,10 @@ Flag suspicious overlaps — impossible travel (same subject at two different lo
 ```sh
 timeline conflicts
 timeline conflicts --window-minutes 45
+timeline conflicts --mph 55
 ```
+
+Coordinates are optional. Pass `--lat` and `--lon` on `timeline add`, or extra CSV columns, and the same command estimates drive time. A pair outside the flat window still flags if the drive does not fit. Confidence is `high` when the gap is less than half the estimate, otherwise `medium`. Same place name, ignoring case, is not a conflict.
 
 Export the timeline as a markdown document:
 
@@ -75,11 +78,12 @@ Each event has:
 | `source` | yes | Citation label, e.g. `phone records` |
 | `subject` | no | Person-of-interest tag |
 | `location` | no | Place tag |
+| `lat` / `lon` | no | Decimal degrees. Optional drive-time estimate only |
 
 ## Roadmap
 
+- [x] Richer conflict heuristics (travel-time estimates, confidence scoring).
 - A [Tauri](https://tauri.app) desktop GUI is planned, so timelines can be built and reviewed visually without touching the terminal.
-- Richer conflict heuristics (travel-time estimates, confidence scoring).
 
 ## License
 

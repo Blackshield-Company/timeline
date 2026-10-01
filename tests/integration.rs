@@ -4,7 +4,8 @@
 use chrono::TimeZone;
 use chrono::Utc;
 use timeline::{
-    detect_conflicts, import_csv, parse_timestamp, render_markdown, Conflict, Event, Store,
+    detect_conflicts, import_csv, parse_timestamp, render_markdown, Confidence, Conflict, Event,
+    Store,
 };
 
 fn event(
@@ -20,6 +21,8 @@ fn event(
         source: source.to_string(),
         subject: subject.map(str::to_string),
         location: location.map(str::to_string),
+        lat: None,
+        lon: None,
     }
 }
 
@@ -195,4 +198,61 @@ fn export_produces_markdown() {
     let first = md.find("Left apartment").unwrap();
     let second = md.find("Checked into motel").unwrap();
     assert!(first < second);
+}
+
+#[test]
+fn coordinates_flag_a_drive_that_misses_the_flat_window() {
+    let mut first = event(
+        "2026-09-18T09:00:00Z",
+        "Debit card used",
+        "bank records",
+        Some("Alex Merren"),
+        Some("Dockside"),
+    );
+    first.lat = Some(36.0);
+    first.lon = Some(-80.0);
+    let mut second = event(
+        "2026-09-18T10:30:00Z",
+        "Toll booth camera hit",
+        "highway authority",
+        Some("Alex Merren"),
+        Some("Ridgeline Pass"),
+    );
+    second.lat = Some(40.0);
+    second.lon = Some(-80.0);
+
+    let conflicts = detect_conflicts(&[first, second], 30);
+    let Conflict::ImpossibleTravel {
+        gap_minutes,
+        required_minutes,
+        confidence,
+        ..
+    } = &conflicts[0]
+    else {
+        panic!("expected a drive-time conflict, got: {conflicts:?}");
+    };
+    assert_eq!(*gap_minutes, 90);
+    assert!(required_minutes.unwrap() > 90);
+    assert_eq!(*confidence, Confidence::High);
+}
+
+#[test]
+fn same_place_ignoring_case_is_not_a_conflict() {
+    let events = vec![
+        event(
+            "2026-09-18T09:00:00Z",
+            "Debit card used",
+            "bank records",
+            Some("Alex Merren"),
+            Some("dockside"),
+        ),
+        event(
+            "2026-09-18T09:05:00Z",
+            "Witness saw him",
+            "statement",
+            Some("Alex Merren"),
+            Some("Dockside"),
+        ),
+    ];
+    assert!(detect_conflicts(&events, 30).is_empty());
 }

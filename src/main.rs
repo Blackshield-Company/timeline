@@ -4,8 +4,8 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use timeline::{
-    detect_conflicts, import_csv, parse_timestamp, render_markdown, Conflict, Event, Store,
-    DEFAULT_WINDOW_MINUTES, STORE_FILE,
+    detect_conflicts_at, import_csv, parse_timestamp, render_markdown, Confidence, Conflict, Event,
+    Store, DEFAULT_MPH, DEFAULT_WINDOW_MINUTES, STORE_FILE,
 };
 
 #[derive(Parser)]
@@ -45,6 +45,14 @@ enum Commands {
         /// Optional location tag.
         #[arg(long, value_name = "LOCATION")]
         location: Option<String>,
+
+        /// Optional latitude, decimal degrees.
+        #[arg(long)]
+        lat: Option<f64>,
+
+        /// Optional longitude, decimal degrees.
+        #[arg(long)]
+        lon: Option<f64>,
     },
 
     /// Bulk import events from a CSV file (columns: at,desc,source,subject,location).
@@ -66,6 +74,10 @@ enum Commands {
         /// Travel threshold in minutes for impossible-travel detection.
         #[arg(long, default_value_t = DEFAULT_WINDOW_MINUTES, value_name = "MINUTES")]
         window_minutes: i64,
+
+        /// Assumed driving speed when both sightings have coordinates.
+        #[arg(long, default_value_t = DEFAULT_MPH, value_name = "MPH")]
+        mph: f64,
     },
 
     /// Export the timeline as a markdown document (stdout, or a file with --out).
@@ -107,6 +119,8 @@ fn main() -> Result<()> {
             source,
             subject,
             location,
+            lat,
+            lon,
         } => {
             let at = parse_timestamp(&at).context("invalid --at value")?;
             let mut store = require_store()?;
@@ -116,6 +130,8 @@ fn main() -> Result<()> {
                 source,
                 subject,
                 location,
+                lat,
+                lon,
             });
             store.save(&store_path())?;
             println!("added event: {desc}");
@@ -161,9 +177,12 @@ fn main() -> Result<()> {
             }
         }
 
-        Commands::Conflicts { window_minutes } => {
+        Commands::Conflicts {
+            window_minutes,
+            mph,
+        } => {
             let store = require_store()?;
-            let conflicts = detect_conflicts(&store.events, window_minutes);
+            let conflicts = detect_conflicts_at(&store.events, window_minutes, mph);
             if conflicts.is_empty() {
                 println!("no conflicts detected");
             } else {
@@ -175,13 +194,25 @@ fn main() -> Result<()> {
                             first,
                             second,
                             gap_minutes,
-                        } => println!(
-                            "- IMPOSSIBLE TRAVEL: '{subject}' recorded at '{}' ({}) then at '{}' ({}) only {gap_minutes} min apart (threshold: {window_minutes} min)",
-                            first.location.as_deref().unwrap_or("?"),
-                            first.at.to_rfc3339(),
-                            second.location.as_deref().unwrap_or("?"),
-                            second.at.to_rfc3339(),
-                        ),
+                            required_minutes,
+                            confidence,
+                        } => {
+                            let rank = match confidence {
+                                Confidence::High => "high",
+                                Confidence::Medium => "medium",
+                            };
+                            let drive = match required_minutes {
+                                Some(mins) => format!(", drive estimate {mins} min at {mph} mph"),
+                                None => String::new(),
+                            };
+                            println!(
+                                "- IMPOSSIBLE TRAVEL ({rank}): '{subject}' recorded at '{}' ({}) then at '{}' ({}) only {gap_minutes} min apart (threshold: {window_minutes} min{drive})",
+                                first.location.as_deref().unwrap_or("?"),
+                                first.at.to_rfc3339(),
+                                second.location.as_deref().unwrap_or("?"),
+                                second.at.to_rfc3339(),
+                            );
+                        }
                         Conflict::DuplicateDescription { description, sources } => println!(
                             "- DUPLICATE DESCRIPTION: \"{description}\" reported by different sources: {}",
                             sources.join(", ")
