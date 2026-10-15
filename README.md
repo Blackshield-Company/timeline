@@ -1,3 +1,5 @@
+![timeline](.github/preview.png)
+
 # timeline
 
 A local-first evidence timeline builder for detectives and defense attorneys who currently build case timelines by hand in PowerPoint.
